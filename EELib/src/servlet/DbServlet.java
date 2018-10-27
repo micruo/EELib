@@ -48,10 +48,11 @@ public abstract class DbServlet extends HttpServlet {
   }
   public void exec(Command[] cmds, HttpServletRequest request) throws IOException, ServletException {
     for(Command cmd : cmds) {
-      if(request.getParameter(cmd.parameter) != null) {
+      String s = request.getParameter(cmd.parameter);
+      if(s != null) {
         try {
-          cmd.function.exec(cmd.parameter);
-          break;
+          if(cmd.function.exec(s))
+            break;
         } catch (IOException | ServletException ex) {
           throw ex;
         }

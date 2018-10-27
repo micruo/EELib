@@ -14,5 +14,5 @@ import javax.servlet.ServletException;
  */
 @FunctionalInterface
 public interface ServletFunction {
-  public void exec(String command) throws IOException, ServletException;
+  public boolean exec(String command) throws IOException, ServletException;
 }
