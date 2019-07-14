@@ -10,13 +10,13 @@ import com.rtsoft.utils.Couple;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.PrintWriter;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Properties;
-import java.util.function.Consumer;
-import java.util.function.Function;
+import java.util.function.*;
+import java.util.stream.IntStream;
+import java.util.stream.Stream;
 import javax.mail.Message;
 import javax.mail.MessagingException;
 import javax.mail.Multipart;
@@ -77,14 +77,15 @@ public abstract class DbServlet extends HttpServlet {
   }
   protected abstract void processRequest(DbConnection dbConn, HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException;
 
+  public <T> Stream<T> getSelected(HttpServletRequest req, String cmd, List<T> elements) {
+    return IntStream.range(0, elements.size()).filter(i -> req.getParameter(cmd + i) != null).mapToObj(i -> elements.get(i));
+  } 
   @Override
   protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
     try(DbConnection dbConn = new DbConnection(getConnection())) {
       processRequest(dbConn, req, resp);
     } catch(Throwable ex) {
-      try (PrintWriter out = resp.getWriter()) {
-        ex.printStackTrace(out);
-      }
+      getServletContext().log("doPost", ex);
     }
   }
 
@@ -93,9 +94,7 @@ public abstract class DbServlet extends HttpServlet {
     try(DbConnection dbConn = new DbConnection(getConnection())) {
       processRequest(dbConn, req, resp);
     } catch(Throwable ex) {
-      try (PrintWriter out = resp.getWriter()) {
-        ex.printStackTrace(out);
-      }
+      getServletContext().log("doPost", ex);
     }
   }
   public void send(String to, String cc, String subject, String body, File allegati) throws MessagingException, IOException {
@@ -145,16 +144,38 @@ public abstract class DbServlet extends HttpServlet {
     message.setContent( multipart );
     Transport.send(message, from, passwd);
   }
-  public <T> void choose(HttpServletRequest request, Function<T, String> p, List<T> a, Couple<String, Consumer<T>> ... what) {
+  public <T> String choose(HttpServletRequest request, Function<T, String> p, List<T> a, Couple<String, Function<T, String>> ... what) {
     // è più efficace così che con gli stream
     for(T t : a) {
-      for(Couple<String, Consumer<T>> c : what) {
+      for(Couple<String, Function<T, String>> c : what) {
         if(request.getParameter(c.getFirst() + p.apply(t)) != null) {
-          c.getSecond().accept(t);
-          return;
+          return c.getSecond().apply(t);
         }
       }
     }
+    return null;
   }
- 
+
+  public static <T> T create(DbConnection dbConn, RequestToBean rb, Class<T> clazz, Consumer<T> build) throws SQLException {
+    T obj = null;
+    try {
+      String param = rb.getRequest().getParameter(clazz.getSimpleName().toLowerCase());
+      int id = param != null && !param.isEmpty() ? Integer.parseInt(param) : 0;
+      if(id == 0) {
+        obj = clazz.newInstance();
+      } else {
+        obj = dbConn.getKey(clazz, id).get();
+      }
+      rb.read(obj);
+      if(id == 0) {
+        if(build != null)
+          build.accept(obj);
+        dbConn.insert(obj);
+      } else {
+        dbConn.update(obj);
+      }
+    } catch(InstantiationException | IllegalAccessException ex) {
+    }
+    return obj;
+  }
 }
