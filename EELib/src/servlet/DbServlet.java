@@ -6,14 +6,21 @@
 package servlet;
 
 import com.rtsoft.dbLib.DbConnection;
+import com.rtsoft.storage.StorageFactory;
 import com.rtsoft.utils.Couple;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.attribute.PosixFilePermission;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Properties;
+import java.util.Set;
 import java.util.function.*;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
@@ -32,6 +39,7 @@ import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.Part;
 import javax.sql.DataSource;
 
 /**
@@ -177,5 +185,31 @@ public abstract class DbServlet extends HttpServlet {
     } catch(InstantiationException | IllegalAccessException ex) {
     }
     return obj;
+  }
+  public static Path externalDir(HttpServlet servlet, Part file, boolean bSetPerm, String other, String... more) throws IOException {
+    Path path = externalDir(servlet, other, more);
+    try(OutputStream fo = java.nio.file.Files.newOutputStream(path)) {
+      StorageFactory.copyFile(file.getInputStream(), fo);
+    }
+    if(bSetPerm) {
+      Set<java.nio.file.attribute.PosixFilePermission> s = java.nio.file.Files.getPosixFilePermissions(path);
+      s.add(PosixFilePermission.OTHERS_READ);
+      java.nio.file.Files.setPosixFilePermissions(path, s);
+    }
+    return path;
+  }
+  public Path externalDir(String other, Part file, boolean bSetPerm, String... more) throws IOException {
+    return externalDir(this, file, bSetPerm, other, more);
+  }
+  public static Path externalDir(HttpServlet servlet, String other, String... more) {
+    Path path = Paths.get(servlet.getServletContext().getRealPath("/")).resolveSibling(other);
+    try {
+      if(!Files.exists(path))
+        Files.createDirectories(path);
+    } catch (IOException ex) {
+    }
+    for(String m : more)
+      path = path.resolve(m);
+    return path;
   }
 }
