@@ -18,12 +18,16 @@ import java.nio.file.Paths;
 import java.nio.file.attribute.PosixFilePermission;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.text.MessageFormat;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.Set;
 import java.util.function.*;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
+import javax.activation.DataHandler;
 import javax.mail.Message;
 import javax.mail.MessagingException;
 import javax.mail.Multipart;
@@ -33,8 +37,10 @@ import javax.mail.internet.InternetAddress;
 import javax.mail.internet.MimeBodyPart;
 import javax.mail.internet.MimeMessage;
 import javax.mail.internet.MimeMultipart;
+import javax.mail.util.ByteArrayDataSource;
 import javax.naming.InitialContext;
 import javax.naming.NamingException;
+import javax.servlet.ServletConfig;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
@@ -48,10 +54,38 @@ import javax.sql.DataSource;
  */
 public abstract class DbServlet extends HttpServlet {
 
+  protected interface Pager {
+    public String value();
+    public Class<? extends Page> page();
+  }
   private final String sourceName;
+  private final Class<? extends Page> def;
+  private final Pager[] pager;
 
   public DbServlet(String sourceName) {
+    this(sourceName, null, null);
+  }
+
+  public DbServlet(String sourceName, Class<? extends Page> def, Pager[] pager) {
     this.sourceName = sourceName;
+    this.def = def;
+    this.pager = pager;
+  }
+
+  @Override
+  public void init(ServletConfig config) throws ServletException {
+    super.init(config);
+    com.rtsoft.utils.Files.setLogger(new com.rtsoft.utils.Files.Log() {
+      @Override
+      public void log(Throwable ex) {
+        getServletContext().log("", ex);
+      }
+
+      @Override
+      public void log(String prompt, Object... params) {
+        getServletContext().log(MessageFormat.format(prompt, params));
+      }
+    });
   }
   public Connection getConnection() throws ServletException {
     try {
@@ -70,42 +104,48 @@ public abstract class DbServlet extends HttpServlet {
       throw new ServletException(ex);
     }
   }
-  public void exec(Command[] cmds, HttpServletRequest request) throws IOException, ServletException {
-    for(Command cmd : cmds) {
-      String s = request.getParameter(cmd.parameter);
-      if(s != null) {
+  protected void processRequest(DbConnection dbConn, HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException  {
+    
+  }
+
+  private void process(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+    try(DbConnection dbConn = new DbConnection(getConnection())) {
+      req.setCharacterEncoding("UTF-8");
+      Class<? extends Page> page = def;
+      if(pager != null) {
+        Optional<Pager> oPage = Arrays.stream(pager).filter(t -> req.getParameter(t.value()) != null).findFirst();
+        if(oPage.isPresent())
+          page = oPage.get().page();
+      }
+      if(page != null) {
         try {
-          if(cmd.function.exec(s))
-            break;
-        } catch (IOException | ServletException ex) {
-          throw ex;
+          Page p = page.newInstance();
+          p.set(this, dbConn, req, resp);
+          p.execute();
+          String go = p.getPage();
+          if(go != null)
+            req.getRequestDispatcher(go).forward(req, resp);
+        } catch (InstantiationException | IllegalAccessException ex) {
+          throw new ServletException(ex);
         }
+      } else {
+        processRequest(dbConn, req, resp);
       }
     }
   }
-  protected abstract void processRequest(DbConnection dbConn, HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException;
-
   public <T> Stream<T> getSelected(HttpServletRequest req, String cmd, List<T> elements) {
     return IntStream.range(0, elements.size()).filter(i -> req.getParameter(cmd + i) != null).mapToObj(i -> elements.get(i));
   } 
   @Override
   protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
-    try(DbConnection dbConn = new DbConnection(getConnection())) {
-      processRequest(dbConn, req, resp);
-    } catch(Throwable ex) {
-      getServletContext().log("doPost", ex);
-    }
+    process(req, resp);
   }
 
   @Override
   protected void doGet(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
-    try(DbConnection dbConn = new DbConnection(getConnection())) {
-      processRequest(dbConn, req, resp);
-    } catch(Throwable ex) {
-      getServletContext().log("doPost", ex);
-    }
+    process(req, resp);
   }
-  public void send(String to, String cc, String subject, String body, File allegati) throws MessagingException, IOException {
+  public void send(String to, String cc, String subject, String body, Object... allegati) throws MessagingException, IOException {
     String from;
     String passwd;
     String smtp;
@@ -143,10 +183,24 @@ public abstract class DbServlet extends HttpServlet {
     MimeBodyPart bodyPart = new MimeBodyPart();
     bodyPart.setText(body, "UTF-8");
     multipart.addBodyPart( bodyPart );
-    if(allegati != null) {
+    for(Object att : allegati) {
       bodyPart = new MimeBodyPart();
-      bodyPart.attachFile( allegati );
-      bodyPart.setFileName( allegati.getName() );
+      if(att instanceof File) {
+        File f = (File)att;
+        bodyPart.attachFile( f );
+        bodyPart.setFileName( f.getName() );
+        
+      } else if(att instanceof Part) {
+        Part p = (Part)att;
+        ByteArrayDataSource ds = new ByteArrayDataSource(p.getInputStream(), p.getContentType());
+        bodyPart.setDataHandler(new DataHandler(ds));
+        bodyPart.setFileName( p.getSubmittedFileName() );
+      } else if(att instanceof String[]) {
+        String[] s = (String[])att;
+        ByteArrayDataSource ds = new ByteArrayDataSource(s[1], "text/plain");
+        bodyPart.setDataHandler(new DataHandler(ds));
+        bodyPart.setFileName( s[0] );
+      }
       multipart.addBodyPart( bodyPart );
     }
     message.setContent( multipart );
@@ -186,10 +240,13 @@ public abstract class DbServlet extends HttpServlet {
     }
     return obj;
   }
-  public static Path externalDir(HttpServlet servlet, Part file, boolean bSetPerm, String other, String... more) throws IOException {
+  public static Path externalDir(StorageFactory sf, HttpServlet servlet, Part file, boolean bSetPerm, String other, String... more) throws IOException {
     Path path = externalDir(servlet, other, more);
     try(OutputStream fo = java.nio.file.Files.newOutputStream(path)) {
-      StorageFactory.copyFile(file.getInputStream(), fo);
+      if(sf == null)
+        StorageFactory.copyFile(file.getInputStream(), fo);
+      else
+        sf.copyFile(file.getInputStream(), fo, false);
     }
     if(bSetPerm) {
       Set<java.nio.file.attribute.PosixFilePermission> s = java.nio.file.Files.getPosixFilePermissions(path);
@@ -199,7 +256,7 @@ public abstract class DbServlet extends HttpServlet {
     return path;
   }
   public Path externalDir(String other, Part file, boolean bSetPerm, String... more) throws IOException {
-    return externalDir(this, file, bSetPerm, other, more);
+    return externalDir(null, this, file, bSetPerm, other, more);
   }
   public static Path externalDir(HttpServlet servlet, String other, String... more) {
     Path path = Paths.get(servlet.getServletContext().getRealPath("/")).resolveSibling(other);
