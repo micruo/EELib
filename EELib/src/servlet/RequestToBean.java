@@ -46,11 +46,11 @@ public class RequestToBean {
           // ok
         }
         String s = request.getParameter(fi.getName());
-        if(s == null)
+        if(s == null && fi.getType() != FieldsInfo.Classes.BOOL)
           continue;
         switch(fi.getType()) {
         case BOOL:
-          fi.getField().setBoolean(p, !s.isEmpty());
+          fi.getField().setBoolean(p, s != null && !s.isEmpty());
           break;
         case INTEGER:
           fi.getField().setInt(p, Integer.parseInt(s));

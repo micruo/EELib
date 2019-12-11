@@ -62,10 +62,6 @@ public abstract class DbServlet extends HttpServlet {
   private final Class<? extends Page> def;
   private final Pager[] pager;
 
-  public DbServlet(String sourceName) {
-    this(sourceName, null, null);
-  }
-
   public DbServlet(String sourceName, Class<? extends Page> def, Pager[] pager) {
     this.sourceName = sourceName;
     this.def = def;
@@ -104,10 +100,6 @@ public abstract class DbServlet extends HttpServlet {
       throw new ServletException(ex);
     }
   }
-  protected void processRequest(DbConnection dbConn, HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException  {
-    
-  }
-
   private void process(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
     try(DbConnection dbConn = new DbConnection(getConnection())) {
       req.setCharacterEncoding("UTF-8");
@@ -123,13 +115,15 @@ public abstract class DbServlet extends HttpServlet {
           p.set(this, dbConn, req, resp);
           p.execute();
           String go = p.getPage();
-          if(go != null)
-            req.getRequestDispatcher(go).forward(req, resp);
+          if(go != null) {
+            if(go.startsWith("http:"))
+              resp.sendRedirect(go);
+            else
+              req.getRequestDispatcher(go).forward(req, resp);
+          }
         } catch (InstantiationException | IllegalAccessException ex) {
           throw new ServletException(ex);
         }
-      } else {
-        processRequest(dbConn, req, resp);
       }
     }
   }
@@ -151,8 +145,8 @@ public abstract class DbServlet extends HttpServlet {
     String smtp;
     String bcc;
     boolean tls;
-    Properties prop = new Properties();
     try(InputStream inStream = getServletContext().getResourceAsStream("WEB-INF/prop.txt")) {
+      Properties prop = new Properties();
       prop.load(inStream);
       from = prop.getProperty("from");
       passwd = prop.getProperty("passwd");
@@ -189,7 +183,6 @@ public abstract class DbServlet extends HttpServlet {
         File f = (File)att;
         bodyPart.attachFile( f );
         bodyPart.setFileName( f.getName() );
-        
       } else if(att instanceof Part) {
         Part p = (Part)att;
         ByteArrayDataSource ds = new ByteArrayDataSource(p.getInputStream(), p.getContentType());
@@ -225,16 +218,18 @@ public abstract class DbServlet extends HttpServlet {
       int id = param != null && !param.isEmpty() ? Integer.parseInt(param) : 0;
       if(id == 0) {
         obj = clazz.newInstance();
-      } else {
+      } else if(dbConn != null) {
         obj = dbConn.getKey(clazz, id).get();
       }
       rb.read(obj);
-      if(id == 0) {
-        if(build != null)
-          build.accept(obj);
-        dbConn.insert(obj);
-      } else {
-        dbConn.update(obj);
+      if(dbConn != null) {
+        if(id == 0) {
+          if(build != null)
+            build.accept(obj);
+          dbConn.insert(obj);
+        } else {
+          dbConn.update(obj);
+        }
       }
     } catch(InstantiationException | IllegalAccessException ex) {
     }

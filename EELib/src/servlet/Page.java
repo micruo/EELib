@@ -44,11 +44,20 @@ public abstract class Page {
   public void setPage(String page) {
     request.setAttribute("pageToGo", page);
   }
+  public void exception(IllegalArgumentException ex) {
+    
+  }
   public String[] commands() {
     return null;
   }
   public String command() {
     return null;
+  }
+  private void ex(InvocationTargetException ex) throws ServletException {
+    if(ex.getCause() instanceof IllegalArgumentException)
+      exception((IllegalArgumentException)ex.getCause());
+    else
+      throw new ServletException(ex.getCause().getMessage());
   }
   public void execute() throws ServletException, IOException {
     String mode = command();
@@ -58,7 +67,9 @@ public abstract class Page {
         try {
           Method m = getClass().getMethod(mode, String.class);
           m.invoke(this, mode);
-        } catch (NoSuchMethodException | SecurityException | IllegalAccessException | IllegalArgumentException | InvocationTargetException ex) {
+        } catch (NoSuchMethodException | SecurityException | IllegalAccessException | IllegalArgumentException ex) {
+        } catch(InvocationTargetException ex2) {
+          ex(ex2);
         }
       }
     } else {
@@ -72,7 +83,9 @@ public abstract class Page {
             Method m = getClass().getMethod(cmd, String.class);
             if((Boolean)m.invoke(this, s))
               break;
-          } catch (NoSuchMethodException | SecurityException | IllegalAccessException | IllegalArgumentException | InvocationTargetException ex) {
+          } catch (NoSuchMethodException | SecurityException | IllegalAccessException | IllegalArgumentException ex) {
+          } catch(InvocationTargetException ex2) {
+            ex(ex2);
           }
         }
       }
