@@ -50,7 +50,7 @@ public class RequestToBean {
           continue;
         switch(fi.getType()) {
         case BOOL:
-          fi.getField().setBoolean(p, s != null && !s.isEmpty());
+          fi.getField().setBoolean(p, s != null);
           break;
         case INTEGER:
           fi.getField().setInt(p, Integer.parseInt(s));
