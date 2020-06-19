@@ -136,7 +136,7 @@ public abstract class Page {
       message.setRecipient(Message.RecipientType.BCC, new InternetAddress(bcc));
     message.setSubject(subject);
     MimeBodyPart bodyPart = new MimeBodyPart();
-    bodyPart.setText(body, "UTF-8");
+    bodyPart.setText(body, "UTF-8", "html");
     multipart.addBodyPart( bodyPart );
     for(Object att : allegati) {
       bodyPart = new MimeBodyPart();

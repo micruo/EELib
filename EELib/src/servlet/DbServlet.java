@@ -8,7 +8,11 @@ package servlet;
 import com.rtsoft.dbLib.DbConnection;
 import com.rtsoft.storage.StorageFactory;
 import com.rtsoft.utils.Couple;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -19,6 +23,7 @@ import java.sql.SQLException;
 import java.text.MessageFormat;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.*;
@@ -189,5 +194,24 @@ public abstract class DbServlet extends HttpServlet {
     for(String m : more)
       path = path.resolve(m);
     return path;
+  }
+  public String getHtml(String dir, String fn, Map<String, String> subst) {
+    File path = new File(getServletContext().getRealPath("/"));
+    path = new File(path.getParentFile(), dir);
+    path = new File(path, fn);
+    StringBuilder sb = new StringBuilder();
+    try(InputStreamReader isr = new InputStreamReader(new FileInputStream(path));
+            BufferedReader br = new BufferedReader(isr)) {
+      String line;
+      while((line = br.readLine()) != null) {
+        if(subst != null) {
+          for(Map.Entry<String, String> k : subst.entrySet())
+            line = line.replaceAll(k.getKey(), k.getValue());
+        }
+        sb.append(line);
+      }
+    } catch (IOException ex) {
+    }
+    return sb.toString();
   }
 }
