@@ -5,9 +5,10 @@
  */
 package game;
 
-import com.rtsoft.service.EndPoint;
-import com.rtsoft.service.NetMsg;
-import com.rtsoft.service.Receiver;
+import com.google.gson.Gson;
+import service.EndPoint;
+import service.NetMsg;
+import service.Receiver;
 import com.rtsoft.utils.Files;
 import java.io.IOException;
 import javax.websocket.EncodeException;
@@ -28,8 +29,8 @@ public class EndPointEE extends EndPoint {
   @Override
   public void sendMsg(NetMsg m) {
     try {
-      session.getBasicRemote().sendObject(m);
-    } catch (IOException | EncodeException ex) {
+      session.getBasicRemote().sendText(new Gson().toJson(m));
+    } catch (IOException ex) {
       Files.log(ex);
     }
   }

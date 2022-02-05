@@ -5,7 +5,7 @@
  */
 package game;
 
-import com.rtsoft.service.NetMsg;
+import service.NetMsg;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.ObjectInputStream;

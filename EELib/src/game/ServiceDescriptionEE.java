@@ -5,9 +5,9 @@
  */
 package game;
 
-import com.rtsoft.service.BrowserCreator;
-import com.rtsoft.service.EndPoint;
-import com.rtsoft.service.ServiceDescription;
+import service.BrowserCreator;
+import service.EndPoint;
+import service.ServiceDescription;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.URI;

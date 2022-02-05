@@ -5,25 +5,20 @@
  */
 package game;
 
-import service.NetMsg;
 import java.io.IOException;
-import java.io.ObjectOutputStream;
-import java.io.OutputStream;
+import java.io.Writer;
+import javax.websocket.DecodeException;
+import javax.websocket.Decoder;
 import javax.websocket.EncodeException;
 import javax.websocket.Encoder;
 import javax.websocket.EndpointConfig;
 
 /**
  *
- * @author michele
+ * @author micheleruotolo
  */
-public class MsgEncoder implements Encoder.BinaryStream<NetMsg> {
+public class TextEncoder implements Encoder.TextStream<String> {
 
-  @Override
-  public void encode(NetMsg arg0, OutputStream arg1) throws EncodeException, IOException {
-		ObjectOutputStream os = new ObjectOutputStream(arg1);
-		os.writeObject(arg0);
-  }
 
   @Override
   public void init(EndpointConfig config) {
@@ -32,5 +27,12 @@ public class MsgEncoder implements Encoder.BinaryStream<NetMsg> {
   @Override
   public void destroy() {
   }
+
+  @Override
+  public void encode(String object, Writer writer) throws EncodeException, IOException {
+    writer.write(object);
+    writer.flush();
+  }
+
   
 }

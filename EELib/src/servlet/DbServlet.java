@@ -200,7 +200,7 @@ public abstract class DbServlet extends HttpServlet {
     path = new File(path.getParentFile(), dir);
     path = new File(path, fn);
     StringBuilder sb = new StringBuilder();
-    try(InputStreamReader isr = new InputStreamReader(new FileInputStream(path));
+    try(InputStreamReader isr = new InputStreamReader(new FileInputStream(path), "UTF-8");
             BufferedReader br = new BufferedReader(isr)) {
       String line;
       while((line = br.readLine()) != null) {
