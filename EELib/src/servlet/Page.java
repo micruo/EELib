@@ -6,6 +6,7 @@
 package servlet;
 
 import com.rtsoft.dbLib.DbConnection;
+import com.rtsoft.utils.Files;
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
@@ -79,10 +80,12 @@ public abstract class Page {
     if(mode != null) {
       mode = request.getParameter(mode);
       if(mode != null && !mode.isEmpty()) {
+        System.out.println("servlet.Page.execute : " + mode);
         try {
           Method m = getClass().getMethod(mode, String.class);
           m.invoke(this, mode);
         } catch (NoSuchMethodException | SecurityException | IllegalAccessException | IllegalArgumentException ex) {
+          Files.log(ex);
         } catch(InvocationTargetException ex2) {
           ex(ex2);
         }

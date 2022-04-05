@@ -5,20 +5,25 @@
  */
 package service;
 
+import com.rtsoft.utils.Files;
+import java.lang.reflect.Constructor;
+import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 /**
  *
  * @author micruo
  */
-public abstract class GameDescription {
+public class GameDescription {
   private final int minPlayers;
   private final int maxPlayers;
   private final ArrayList<Game> games = new ArrayList<>();
   private final ArrayList<Entry> entries = new ArrayList<>();
+  private final Class<? extends Game> gClass;
 
   private class Entry {
     private final String name;
@@ -30,40 +35,49 @@ public abstract class GameDescription {
       this.ep = ep;
     }
   }
-  public GameDescription(int minPlayer, int maxPlayer, Enum[] gameKinds) {
+  public GameDescription(int minPlayer, int maxPlayer, Class<? extends Game> gClass, Enum[] gameKinds) {
     this.minPlayers = minPlayer;
     this.maxPlayers = maxPlayer;
+    this.gClass = gClass;
     if(gameKinds == null) {
-      games.add(new Game());
-      games.add(new Game());
+      newGame("standard");
     } else {
       for(Enum m : gameKinds) {
-        games.add(new Game(m.name()));
-        games.add(new Game(m.name()));
+        newGame(m.name());
       }
     }
   }
-  void set(int idx, EndPoint ep) {
+  final Game newGame(String name) {
+    Game g = null;
+    try {
+      Constructor<? extends Game> c = gClass.getConstructor(String.class);
+      g = c.newInstance(name);
+      games.add(g);
+    } catch (InstantiationException | IllegalAccessException | NoSuchMethodException | SecurityException | IllegalArgumentException | InvocationTargetException ex) {
+      Files.log(ex);
+    }
+    return g;
+  }
+  Game set(int idx, EndPoint ep) {
     Entry e = findEndPoint(ep);
     Game g = games.get(idx);
     e.game = g;
     g.set(e.name, ep);
+    return g;
   }
-  public abstract Receiver getDoc(Game g);
-  public abstract void initAll();
+  void sendToAll(boolean update, NetMsg msg) {
+    if(update) {
+      entries.stream().filter((s) -> (s.game == null || !s.game.isStarted())).forEach((s) -> s.ep.sendMsg(msg));
+    } else {
+      entries.stream().filter((s) -> (s.game != null && s.game.isStarted())).forEach((s) -> s.ep.sendMsg(msg));
+    }
+    
+  }
   void sendToAll(boolean update) {
     NetMsg msg = new NetMsg(-1, update ? "updateService" : "startService");
-    if(update) {
+    if(update)
       appendMsg(msg);
-      for(Entry s : entries) {
-        if(s.game == null || !s.game.isStarted())
-          s.ep.sendMsg(msg);
-      }
-    } else {
-      for(Entry s : entries)
-        if(s.game != null && s.game.isStarted())
-          s.ep.sendMsg(msg);
-    }
+    sendToAll(update, msg);
   }
   private boolean hasName(String name) {
     return entries.stream().anyMatch(s -> s.name.equals(name));
@@ -92,17 +106,24 @@ public abstract class GameDescription {
     Game g = getGame(e, false);
     if(g != null) {
       g.removePlayer(e.name);
-      sendToAll(true);
+      if(!g.isStarted())
+        sendToAll(true);
     }
     return true;
   }
+  void appendMsg(NetMsg msg, Game g) {
+    msg.add("" + games.indexOf(g));
+    msg.add(g.getGame());
+    msg.add(g.getPlayers().stream().collect(Collectors.joining(",")));
+    msg.add(g.nofPlayers() >= minPlayers);
+    msg.add(g.nofPlayers() < maxPlayers);
+  }
   void appendMsg(NetMsg msg) {
     for(Game g : games) {
-      msg.add(g.getGame());
-      msg.add(g.getPlayers().stream().collect(Collectors.joining(",")));
+      appendMsg(msg, g);
     }
   }
-  void createMsg(EndPoint st, String name, NetMsg msg, boolean bService) {
+  int createMsg(EndPoint st, String name, NetMsg msg, boolean bService) {
     int n = 0;
     String newName = name;
     if(true) {
@@ -113,6 +134,8 @@ public abstract class GameDescription {
     }
     entries.add(new Entry(newName, st));
     appendMsg(msg);
+    String nn = newName;
+    return IntStream.range(0, games.size()).filter(i -> games.get(i).getPlayers().contains(nn)).findFirst().orElse(-1);
   }
   public void descr(List<List<String>> d) {
     d.add(Arrays.asList("minPlayers", Integer.toString(minPlayers), "maxPlayers", Integer.toString(maxPlayers)));

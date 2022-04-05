@@ -3,6 +3,7 @@ package service;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
+import java.util.List;
 
 /**
  * Used by SocketThread
@@ -17,6 +18,11 @@ public class NetMsg  {
     this.type = type;
     this.idx = idx;
     body.addAll(Arrays.asList(values));
+  }
+  public NetMsg(int idx, String type, List<?> values) {
+    this.type = type;
+    this.idx = idx;
+    body.addAll(values);
   }
   public void add(Object b) {
     body.add(b);

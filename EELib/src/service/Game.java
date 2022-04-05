@@ -5,20 +5,24 @@
  */
 package service;
 
+import com.google.gson.Gson;
+import com.google.gson.JsonArray;
+import com.rtsoft.utils.Utils;
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  *
  * @author micruo
  */
-public class Game {
+public abstract class Game implements Receiver {
   private final HashMap<String, EndPoint> rcv = new HashMap<>();
   private final ArrayList<String> players = new ArrayList<>();
   private HashSet<String> accepted = new HashSet<>();
-  private String game = "standard";
+  private String game;
   
-  Game() { }
-  Game(String game) {
+  public Game() { }
+  public Game(String game) {
     this.game = game;
   }
   boolean incAccepted(String name) {
@@ -42,6 +46,8 @@ public class Game {
       d.add(row);
   }
 
+  public abstract void  init();
+  public abstract void load(String playerName);
   public String getGame() {
     return game;
   }
@@ -52,23 +58,29 @@ public class Game {
 
   void set(String name, EndPoint st) {
     rcv.put(name, st);
-    players.add(name);
+    if(!players.contains(name))
+      players.add(name);
   }
   int nofPlayers() {
     return players.size();
   }
   void removePlayer(String name) {
-    if(accepted == null) {
+    if(isStarted()) {
       // if the game is started yet
-      rcv.values().stream().forEach(s -> s.forceClose());
-      rcv.clear();
-      players.clear();
-      accepted = new HashSet<>();
+      rcv.remove(name);
+      if(rcv.isEmpty()) {
+        rcv.values().stream().forEach(s -> s.forceClose());
+        players.clear();
+        accepted = new HashSet<>();
+      }
     } else {
       rcv.remove(name);
       players.remove(name);
       accepted.remove(name);
     }
+  }
+  public <T> java.util.List<T> getArray(Gson gson, JsonArray ar, Class<T> cl) {
+    return Utils.asStream(ar.iterator()).map(l -> gson.fromJson(l, cl)).collect(Collectors.toList());
   }
   public void sendTo(NetMsg msg, String to) {
     rcv.get(to).sendMsg(msg);

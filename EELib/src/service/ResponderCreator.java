@@ -57,41 +57,66 @@ public class ResponderCreator implements Receiver {
   }
   @Override
   public void receive(EndPoint st, String txt) {
-    NetMsg msg = new Gson().fromJson(txt, NetMsg.class);
-    Iterator<?> body = msg.getIterator();
-    String gameName = (String)body.next();
-    GameDescription gd = games.get(gameName);
-    Integer row;
-    Game g;
-    switch (msg.getType()) {
-    case "initService":
-      String name = (String)body.next();
+    try {
+      NetMsg msg = new Gson().fromJson(txt, NetMsg.class);
+      Iterator<?> body = msg.getIterator();
+      String gameName = (String)body.next();
+      GameDescription gd = games.get(gameName);
+      int row;
+      Game g;
+      String name;
       NetMsg msg2 = new NetMsg(-1, "initService");
-      synchronized(games) {
-        gd.createMsg(st, name, msg2, bService);
+      switch (msg.getType()) {
+      case "initService":
+        name = (String)body.next();
+        synchronized(games) {
+          row = gd.createMsg(st, name, msg2, bService);
+          if(row >= 0) {
+            g = gd.set(row, st);
+            st.setDefault(g);
+            st.sendMsg(new NetMsg(-1, "startService"));
+            g.load(name);
+            return;
+          }
+        }
+        st.sendMsg(msg2);
+        break;
+      case "updateService":
+        row = Integer.parseInt((String)body.next());
+        synchronized(games) {
+          gd.set(row, st);
+        }
+        gd.sendToAll(true);
+        break;
+      case "newService":
+        name = (String)body.next();
+        synchronized(games) {
+          g = gd.newGame(name);
+          gd.appendMsg(msg2, g);
+        }
+        gd.sendToAll(true, msg2);
+        break;
+      case "startService":
+        synchronized(games) {
+          g = gd.getGame(st);
+          if(g == null)
+            return;
+        }
+        if(g.incAccepted(gd.entryName(st))) {
+          gd.sendToAll(true); // per settare la partita chiusa...
+          try {
+            g.init();
+          } catch(Exception e) {
+            Files.log(e);
+          }
+          g.setDefault(g);
+          gd.sendToAll(false); // per settare la partita chiusa...
+          g.load(null);
+        }
+        break;
       }
-      st.sendMsg(msg2);
-      break;
-    case "updateService":
-      row = Integer.parseInt((String)body.next());
-      synchronized(games) {
-        gd.set(row, st);
-      }
-      gd.sendToAll(true);
-      break;
-    case "startService":
-      synchronized(games) {
-        g = gd.getGame(st);
-        if(g == null)
-          return;
-      }
-      if(g.incAccepted(gd.entryName(st))) {
-        gd.sendToAll(true); // per settare la partita chiusa...
-        g.setDefault(gd.getDoc(g));
-        gd.sendToAll(false); // per settare la partita chiusa...
-        gd.initAll();
-      }
-      break;
+    } catch(Exception ex) {
+      Files.log(ex);
     }
   }
   public void removeGame(EndPoint ep) {

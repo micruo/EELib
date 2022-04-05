@@ -11,7 +11,6 @@ import service.NetMsg;
 import service.Receiver;
 import com.rtsoft.utils.Files;
 import java.io.IOException;
-import javax.websocket.EncodeException;
 import javax.websocket.Session;
 
 /**
